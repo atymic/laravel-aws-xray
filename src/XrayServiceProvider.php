@@ -115,7 +115,13 @@ final class XrayServiceProvider extends PackageServiceProvider
 
     private function registerMiddleware(): void
     {
-        if ($this->app->runningInConsole() && ! $this->app->runningUnitTests()) {
+        // `runningInConsole()` is TRUE on Lambda: Bref serves HTTP under the CLI
+        // SAPI, so php_sapi_name() is `cli` for web requests too. Skipping
+        // registration on that basis silently disables the package in exactly
+        // the environment it targets — no root span, nothing emitted, and no
+        // warning to explain it. Only skip when this is genuinely a console
+        // command, which Lambda is not.
+        if ($this->isConsoleCommand()) {
             return;
         }
 
@@ -130,6 +136,31 @@ final class XrayServiceProvider extends PackageServiceProvider
         // Prepended so the root span covers as much of the request as possible,
         // including other middleware.
         $this->app->make(Kernel::class)->prependMiddleware(TraceRequest::class);
+    }
+
+    /**
+     * Whether this process is really running an artisan command.
+     *
+     * Deliberately not `runningInConsole()`, which asks the SAPI and therefore
+     * answers "yes" to every Bref HTTP request. On Lambda the runtime says what
+     * it is: `BREF_RUNTIME=console` and the console handler both indicate an
+     * actual command, while `function`/`fpm` serve HTTP. Off Lambda, the SAPI
+     * answer is the right one.
+     */
+    private function isConsoleCommand(): bool
+    {
+        // Checked before the test-suite guard so the Lambda behaviour is
+        // reachable from a test at all — otherwise the one condition that
+        // matters here could never be reproduced.
+        if (Environment::isLambda()) {
+            return (getenv('BREF_RUNTIME') ?: '') === 'console';
+        }
+
+        if ($this->app->runningUnitTests()) {
+            return false;
+        }
+
+        return $this->app->runningInConsole();
     }
 
     private function registerInstrumentation(): void
