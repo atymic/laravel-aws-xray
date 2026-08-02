@@ -45,9 +45,15 @@ semantic-convention format on ingest, so both wire formats end up in the
 'emitter' => env('XRAY_EMITTER', 'auto'),
 ```
 
-`auto` resolves collector → daemon → direct, taking the first that can actually
-deliver. In a test suite it always resolves to `null`, so an application's tests
-never emit anything.
+`auto` resolves collector → daemon, taking the first that can actually deliver,
+and falling back to no-op rather than to `otlp`. Direct OTLP is the only
+transport that blocks the response, so it has to be chosen by name — it is never
+arrived at by elimination. On Lambda that matters especially: credentials are
+always present, so an availability check alone would select it on every function
+that has neither a collector nor a daemon.
+
+In a test suite `auto` always resolves to `null`, so an application's tests never
+emit anything.
 
 ### `xray` — UDP to the daemon
 
@@ -83,7 +89,8 @@ plain container.
 
 It is also the only one that **must finish before the handler returns** — Lambda
 freezes the execution environment at that point, so an in-flight request would
-never complete. Measure it before making it the default on Lambda.
+never complete. That is why `auto` will not select it: set `XRAY_EMITTER=otlp`
+deliberately, and measure it, before running it on Lambda.
 
 Requires CloudWatch Transaction Search to be enabled. Note that enabling it is
 **account-and-region-wide**, not per-application.

@@ -11,7 +11,13 @@ use Atymic\Xray\Emitter\UdpDaemonEmitter;
 use Atymic\Xray\XrayServiceProvider;
 
 afterEach(function (): void {
-    foreach (['AWS_XRAY_DAEMON_ADDRESS', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] as $key) {
+    foreach ([
+        'AWS_XRAY_DAEMON_ADDRESS',
+        'OTEL_EXPORTER_OTLP_ENDPOINT',
+        'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
+        'AWS_ACCESS_KEY_ID',
+        'AWS_SECRET_ACCESS_KEY',
+    ] as $key) {
         putenv($key);
     }
 });
@@ -71,6 +77,20 @@ it('uses the daemon when only active tracing is available', function (): void {
 
     expect(autoResolved())->toBeInstanceOf(UdpDaemonEmitter::class);
 })->skip(fn () => ! function_exists('socket_create'), 'ext-sockets unavailable');
+
+it('never auto-resolves to the blocking otlp transport', function (): void {
+    // OtlpEmitter::isAvailable() is curl + credentials, and Lambda injects
+    // credentials everywhere — so including it in the chain made every function
+    // without a collector or daemon POST each span synchronously before the
+    // handler could return. `auto` must never pick the transport that blocks
+    // the response; it has to be named explicitly.
+    putenv('AWS_XRAY_DAEMON_ADDRESS');
+    putenv('OTEL_EXPORTER_OTLP_ENDPOINT');
+    putenv('AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE');
+    putenv('AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+
+    expect(autoResolved())->not->toBeInstanceOf(OtlpEmitter::class);
+});
 
 it('reports the tracing mode each emitter needs', function (): void {
     // Only the UDP path depends on `tracing: Active`, because that is what

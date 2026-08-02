@@ -213,11 +213,19 @@ final class XrayServiceProvider extends PackageServiceProvider
 
     /**
      * Prefer the transport that keeps work off the request path, then the one
-     * that is already running, then the one that always works.
+     * that is already running.
+     *
+     * `otlp` is deliberately not in this chain. Its availability check is
+     * `curl_init() && $signer->hasCredentials()`, and Lambda injects
+     * credentials into every execution environment — so on any function without
+     * a collector or a daemon it resolves true unconditionally, turning every
+     * span into a blocking signed HTTPS POST on the request path. That is the
+     * one transport that delays the response, so it must be asked for by name
+     * rather than arrived at by elimination.
      */
     private function autoEmitter(): Emitter
     {
-        foreach (['collector', 'xray', 'otlp'] as $driver) {
+        foreach (['collector', 'xray'] as $driver) {
             $emitter = $this->makeEmitter($driver);
 
             if ($emitter?->isAvailable() === true) {

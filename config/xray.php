@@ -33,7 +33,12 @@ return [
     |   null       Discard. The default while testing.
     |
     | `auto` resolves: collector (if an OTLP endpoint is configured) → xray (if
-    | a daemon address is present) → otlp (if credentials resolve) → log/null.
+    | a daemon address is present) → log locally, otherwise null.
+    |
+    | `otlp` is never auto-selected. It is the only transport that blocks the
+    | response, and its availability check comes down to having credentials —
+    | which Lambda always injects — so elimination would land on it for every
+    | function without a collector or daemon. Ask for it by name.
     |
     */
 
