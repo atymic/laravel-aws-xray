@@ -1,0 +1,89 @@
+{
+    "name": "atymic/laravel-aws-xray",
+    "description": "AWS X-Ray tracing for Laravel on Lambda — built for Octane, Bref and Transaction Search",
+    "keywords": [
+        "laravel",
+        "aws",
+        "xray",
+        "tracing",
+        "observability",
+        "octane",
+        "bref",
+        "lambda",
+        "opentelemetry"
+    ],
+    "homepage": "https://github.com/atymic/laravel-aws-xray",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "atymic",
+            "email": "atymicq@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "ext-json": "*",
+        "illuminate/contracts": "^12.0||^13.0",
+        "illuminate/support": "^12.0||^13.0",
+        "spatie/laravel-package-tools": "^1.16"
+    },
+    "require-dev": {
+        "aws/aws-sdk-php": "^3.390",
+        "guzzlehttp/guzzle": "^7.8",
+        "larastan/larastan": "^3.0",
+        "laravel/octane": "^2.0",
+        "laravel/pint": "^1.14",
+        "nunomaduro/collision": "^8.8",
+        "orchestra/testbench": "^10.0||^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-arch": "^4.0",
+        "pestphp/pest-plugin-laravel": "^4.0",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan-deprecation-rules": "^2.0",
+        "phpstan/phpstan-phpunit": "^2.0"
+    },
+    "suggest": {
+        "ext-sockets": "Required for the UDP daemon emitter",
+        "aws/aws-sdk-php": "Required for AWS SDK instrumentation, and for SigV4 signing via the SDK credential chain",
+        "guzzlehttp/guzzle": "Required for the collector and direct OTLP emitters"
+    },
+    "autoload": {
+        "psr-4": {
+            "Atymic\\Xray\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Atymic\\Xray\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "analyse": "vendor/bin/phpstan analyse",
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage",
+        "format": "vendor/bin/pint"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0.x-dev"
+        },
+        "laravel": {
+            "providers": [
+                "Atymic\\Xray\\XrayServiceProvider"
+            ],
+            "aliases": {
+                "Xray": "Atymic\\Xray\\Facades\\Xray"
+            }
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
