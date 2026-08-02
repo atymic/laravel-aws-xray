@@ -19,6 +19,16 @@ beforeEach(function (): void {
     $this->tracer = app(Tracer::class);
 });
 
+afterEach(function (): void {
+    // These drive detection through the environment, so they must not leak into
+    // whatever runs next.
+    foreach (['AWS_LAMBDA_FUNCTION_NAME', 'BREF_LOOP_MAX', 'XRAY_OCTANE'] as $key) {
+        putenv($key);
+    }
+
+    unset($_SERVER['LARAVEL_OCTANE'], $_SERVER['XRAY_OCTANE']);
+});
+
 it('gives every request its own trace id', function (): void {
     foreach (range(1, 250) as $i) {
         $this->tracer->startTrace();
@@ -174,3 +184,46 @@ it('ends the trace on the octane request lifecycle', function (): void {
     expect(emitter()->spans())->toHaveCount(1)
         ->and($this->tracer->context())->toBeNull();
 });
+
+it('detects bref as octane even though LARAVEL_OCTANE is never set', function (): void {
+    // Measured on a real Bref deploy: LARAVEL_OCTANE is null, yet one container
+    // serves up to BREF_LOOP_MAX requests through a single booted app. Without
+    // this the scope hooks never register and state bleeds between requests —
+    // the exact failure this class exists to prevent.
+    unset($_SERVER['LARAVEL_OCTANE']);
+    putenv('AWS_LAMBDA_FUNCTION_NAME=addcal-web');
+    putenv('BREF_LOOP_MAX=250');
+
+    expect(RequestScope::isOctane())->toBeTrue();
+})->skip(
+    fn () => ! class_exists('Laravel\Octane\ApplicationGateway'),
+    'laravel/octane not installed',
+);
+
+it('does not treat a one-shot lambda invocation as octane', function (): void {
+    // No BREF_LOOP_MAX means no container reuse, so per-request hooks would be
+    // pointless work on every invocation.
+    unset($_SERVER['LARAVEL_OCTANE']);
+    putenv('AWS_LAMBDA_FUNCTION_NAME=addcal-artisan');
+    putenv('BREF_LOOP_MAX');
+
+    expect(RequestScope::isOctane())->toBeFalse();
+});
+
+it('lets XRAY_OCTANE settle it either way', function (string $value, bool $expected): void {
+    // The escape hatch for runtimes that report nothing useful about themselves.
+    unset($_SERVER['LARAVEL_OCTANE']);
+    putenv('AWS_LAMBDA_FUNCTION_NAME=addcal-web');
+    putenv('BREF_LOOP_MAX=250');
+    putenv('XRAY_OCTANE='.$value);
+
+    expect(RequestScope::isOctane())->toBe($expected);
+
+    putenv('XRAY_OCTANE');
+})->with([
+    ['true', true],
+    ['1', true],
+    // Must be able to force it OFF even where detection would say yes.
+    ['false', false],
+    ['0', false],
+]);

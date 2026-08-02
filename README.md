@@ -222,6 +222,23 @@ to the client.
 usually frozen and later reaped without a graceful shutdown, so anything relying
 on it would be lost.
 
+### Detection
+
+`octane:start` sets `LARAVEL_OCTANE`, but **Bref does not** — measured on a real
+deploy, it is null there while one container still serves up to `BREF_LOOP_MAX`
+requests through a single booted app. So Bref is detected from the runtime
+instead: on Lambda, with Octane's gateway loadable and `BREF_LOOP_MAX` present.
+
+If detection gets it wrong, settle it:
+
+```bash
+XRAY_OCTANE=true   # or false to force the hooks off
+```
+
+Getting this wrong in the "not Octane" direction is the expensive one — the
+per-request scope never registers, and trace state bleeds from one request into
+the next for the life of the container.
+
 ## License
 
 MIT.

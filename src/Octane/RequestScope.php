@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Atymic\Xray\Octane;
 
+use Atymic\Xray\Lambda\Environment;
 use Atymic\Xray\Tracer;
 use Illuminate\Contracts\Events\Dispatcher;
 
@@ -56,10 +57,54 @@ final readonly class RequestScope
         $this->tracer->endTrace();
     }
 
+    /**
+     * Whether one booted application is serving many requests.
+     *
+     * `XRAY_OCTANE` settles it either way when set — the only reliable answer
+     * on a runtime that reports nothing useful about itself.
+     *
+     * Otherwise: `LARAVEL_OCTANE` is what `octane:start` sets, but **Bref never
+     * sets it**, and Bref is precisely where this matters — one container serves
+     * up to `BREF_LOOP_MAX` (250) requests through a single booted app. Falling
+     * back to the Octane gateway being in play catches that. Deliberately not
+     * `app()->bound(...)` or `class_exists(Worker::class)`: both are true merely
+     * because laravel/octane is installed, including under a plain CLI run.
+     */
     public static function isOctane(): bool
     {
-        // filter_var, not a loose comparison: `"false" == true` is true in PHP,
-        // which would wire up Octane hooks for an explicit opt-out.
-        return filter_var($_SERVER['LARAVEL_OCTANE'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        // getenv() returns false when unset, so an empty result means "not set"
+        // rather than "set to something falsy".
+        $forced = $_SERVER['XRAY_OCTANE'] ?? getenv('XRAY_OCTANE');
+
+        if ($forced !== false && $forced !== '') {
+            // filter_var, not a loose comparison: `"false" == true` is true in
+            // PHP, which would wire up the hooks for an explicit opt-out.
+            return filter_var($forced, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        if (filter_var($_SERVER['LARAVEL_OCTANE'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return true;
+        }
+
+        // Bref drives Octane's stock Worker without setting LARAVEL_OCTANE, but
+        // still routes through ApplicationGateway, which dispatches these.
+        return self::octaneGatewayIsDriving();
+    }
+
+    /**
+     * Whether Bref is serving HTTP through Octane's gateway.
+     *
+     * `BREF_LOOP_MAX` is what makes one container serve many requests, so its
+     * presence alongside a loadable gateway is the condition this class exists
+     * for. Scoped to Lambda deliberately — this is a Bref-shaped gap, and a
+     * broader guess would risk registering hooks under a plain CLI process.
+     *
+     * Anything else that reuses a container should set `XRAY_OCTANE=true`.
+     */
+    private static function octaneGatewayIsDriving(): bool
+    {
+        return Environment::isLambda()
+            && class_exists('Laravel\Octane\ApplicationGateway')
+            && getenv('BREF_LOOP_MAX') !== false;
     }
 }
